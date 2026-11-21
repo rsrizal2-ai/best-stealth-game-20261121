@@ -6,7 +6,7 @@
 //
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
@@ -21,8 +21,18 @@ function copyTree(source, target) {
 }
 
 // Start from a clean output directory so a stale file from an earlier run
-// can never leak into the entry.
-rmSync(outputDir, { recursive: true, force: true });
+// can never leak into the entry. Clear the directory's CONTENTS, never the
+// directory itself: in the grader MAKEFUN_OUTPUT_DIR is /output, a mount
+// point, and removing a mount point fails with EBUSY — round 1 died exactly
+// here, `rmSync(outputDir)` throwing "EBUSY: resource busy or locked, rmdir
+// '/output'" and the program exiting 1 before writing anything. Removing
+// the entries inside the mount is fine, and a second run (the grader runs
+// the program twice) clears the first run's files the same way.
+if (existsSync(outputDir)) {
+  for (const entry of readdirSync(outputDir)) {
+    rmSync(join(outputDir, entry), { recursive: true, force: true });
+  }
+}
 mkdirSync(outputDir, { recursive: true });
 copyTree(gameDir, join(outputDir, 'game'));
 mkdirSync(join(outputDir, 'screenshots'), { recursive: true });
